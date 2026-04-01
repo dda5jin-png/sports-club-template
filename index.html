@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title id="pageTitle">동호회 매칭 시스템</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // ==========================================================
+    // 💡 동호회 환경설정 (이 부분만 수정해서 사용하세요)
+    // ==========================================================
+    const CONFIG = {
+      clubName: "동호회 이름", // 앱 곳곳에 표시될 동호회 이름
+      clubSubtitle: "소속 및 설명", // 타이틀 아래에 작게 표시될 설명 (예: 건국대 부동산대학원 테니스동아리)
+      sport: "테니스", // 종목 이름 (예: 테니스, 배드민턴)
+      courts: ["A", "B", "C"], // 사용할 코트(또는 테이블) 이름들을 배열로 입력하세요
+      adminPassword: "0000", // 관리자 화면 접속을 위한 기본 비밀번호
+      primaryColor: "#10B981" // 앱의 메인 테마 색상 (HEX 코드)
+    };
+
+    // 설정된 색상을 Tailwind에 적용합니다
+    tailwind.config = { theme: { extend: { colors: { primary: CONFIG.primaryColor, secondary: '#047857', dark: '#111827', accent: '#3B82F6' } } } }
+
+    // HTML 요소에 설정값을 반영
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("pageTitle").innerText = `${CONFIG.clubName} ${CONFIG.sport} 매칭`;
+      document.getElementById("titleClubName").innerText = CONFIG.clubName;
+      document.getElementById("titleSubtitle").innerText = CONFIG.clubSubtitle;
+      document.getElementById("specialCourtName").innerText = CONFIG.courts[CONFIG.courts.length - 1]; 
+      
+      let emoji = '🎾';
+      if(CONFIG.sport.includes('배드민턴')) emoji = '🏸';
+      else if(CONFIG.sport.includes('탁구')) emoji = '🏓';
+      else if(CONFIG.sport.includes('축구') || CONFIG.sport.includes('풋살')) emoji = '⚽';
+      else if(CONFIG.sport.includes('농구')) emoji = '🏀';
+      document.getElementById("appTitleSport").innerText = emoji;
+    });
+  </script>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body { font-family: 'Pretendard', sans-serif; -webkit-tap-highlight-color: transparent; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.3s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes marquee { 0% { transform: translate(0, 0); } 100% { transform: translate(-100%, 0); } }
+    .marquee { overflow: hidden; white-space: nowrap; box-sizing: border-box; }
+    .marquee span { display: inline-block; padding-left: 100%; animation: marquee 20s linear infinite; }
+    select, input[type="text"], input[type="password"] { appearance: none; -webkit-appearance: none; }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-800 h-[100dvh] w-screen overflow-hidden flex justify-center">
+
+<div id="app" class="w-full max-w-md h-full bg-slate-50 flex flex-col relative shadow-xl">
+  
+  <div id="offlineBanner" class="hidden bg-red-600 text-white text-center text-[11px] font-bold py-1.5 flex-shrink-0 z-[60] relative animate-pulse shadow-md">
+     <i class="fa-solid fa-wifi mr-1"></i> 네트워크 연결 끊김 - 변경사항이 여러 사람에게 공유되지 않습니다
+  </div>
+
+  <header class="bg-primary text-white shadow-md z-20 flex-shrink-0 relative overflow-hidden">
+    <div class="px-5 py-4 flex justify-between items-center relative z-10">
+      <div>
+        <h1 class="text-2xl font-black flex items-center shadow-sm">
+          <span id="appTitleSport" class="bg-white text-primary w-8 h-8 rounded-full flex items-center justify-center mr-2 text-lg">🎾</span><span id="titleClubName">동호회 이름</span>
+        </h1>
+        <p id="titleSubtitle" class="text-[11px] font-medium text-emerald-100 mt-1 uppercase">소속 및 설명</p>
+      </div>
+      <button onclick="document.getElementById('debugPanel').classList.toggle('hidden')" class="opacity-50 p-2"><i class="fa-solid fa-cloud"></i></button>
+    </div>
+    <div class="bg-secondary text-xs py-2 marquee font-bold text-white/90 border-t border-emerald-600/50">
+      <span id="noticeText">공지사항이 없습니다.</span>
+    </div>
+  </header>
+
+  <main class="flex-1 overflow-y-auto pb-24 relative p-4" id="mainContent">
+    
+    <!-- HOME TAB -->
+    <section id="tab-home" class="tab-content active space-y-6">
+      
+      <!-- Queue Registration -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 relative z-30">
+        <h2 class="text-base font-bold text-gray-800 mb-3 flex items-center"><i class="fa-solid fa-user-plus mr-2 text-primary"></i> 1명씩 대기 등록</h2>
+        <div id="regFormArea" class="grid grid-cols-[1fr] gap-2">
+          <input type="text" id="regName" placeholder="본인 이름 입력" class="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary text-base font-bold">
+          <div class="flex gap-2">
+            <select id="regNtrp" class="flex-1 px-2 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary text-base font-bold text-center">
+              <option value="1.0">1.0</option><option value="1.5">1.5</option><option value="2.0">2.0</option>
+              <option value="2.5" selected>2.5</option><option value="3.0">3.0</option><option value="3.5">3.5</option><option value="4.0">4.0</option><option value="4.5">4.5</option><option value="5.0">5.0</option>
+            </select>
+            <button onclick="registerQueue()" class="bg-dark text-white px-6 rounded-xl font-bold shadow-md active:scale-95 flex items-center justify-center shrink-0 whitespace-nowrap"><i class="fa-solid fa-arrow-right mr-1.5"></i> 등록</button>
+          </div>
+        </div>
+        <div id="regClosedArea" class="hidden text-center py-5 bg-gray-50 border border-dashed border-gray-300 rounded-xl text-gray-500 font-bold text-sm">
+           🔒 휴식중 / 모임 전<br><span class="text-xs font-normal">관리자가 출석부를 오픈할 때까지 기다려주세요.</span>
+        </div>
+      </div>
+
+      <!-- Courts Status -->
+      <div>
+        <h2 class="text-xl font-black text-gray-800 mb-3 px-1">코트 현황</h2>
+        <div id="courtsContainer" class="flex flex-col gap-4 relative z-10"></div>
+      </div>
+
+      <!-- Queue List -->
+      <div class="mt-8">
+        <div class="flex justify-between items-center mb-3 px-1">
+          <h2 class="text-xl font-black text-gray-800">대기 명단</h2>
+          <span class="text-sm font-bold text-gray-500 bg-gray-200 px-3 py-1 rounded-full"><span id="queueTotalCount">0</span>명 대기중</span>
+        </div>
+        <div id="dailyQueueContainer" class="flex flex-col gap-3 relative z-10"></div>
+      </div>
+      
+    </section>
+
+    <!-- ARCHIVE TAB -->
+    <section id="tab-archive" class="tab-content space-y-6">
+      <div>
+        <h3 class="text-xl font-black mb-3 px-1">📅 모임 요약 보드</h3>
+        <div id="archiveMatches"></div>
+      </div>
+      
+      <div class="mt-8">
+        <h3 class="text-xl font-black mb-3 px-1">전체 회원 누적 통계</h3>
+        <div class="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+          <table class="w-full text-left text-sm whitespace-nowrap">
+            <thead class="bg-gray-50 text-gray-500 font-bold border-b border-gray-200">
+              <tr><th class="px-4 py-3">이름/소속</th><th class="px-3 py-3 text-center">전적</th><th class="px-4 py-3 text-right">승률</th></tr>
+            </thead>
+            <tbody id="statsTableBody" class="divide-y divide-gray-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ADMIN TAB -->
+    <section id="tab-admin" class="tab-content space-y-6">
+      <div id="adminLoginBlock" class="bg-white rounded-3xl p-8 shadow-sm text-center border border-gray-100 mx-auto mt-10">
+        <h2 class="text-xl font-black mb-6 text-gray-700">관리자 인증</h2>
+        <input type="password" id="adminPwd" placeholder="Passcode" class="w-full px-4 py-4 rounded-xl bg-gray-50 border border-gray-200 mb-4 text-center tracking-widest font-mono text-xl outline-none focus:ring-2 focus:ring-primary">
+        <button onclick="loginAdmin()" class="w-full bg-dark text-white py-4 rounded-xl font-bold">접속하기</button>
+      </div>
+
+      <div id="adminSettingsBlock" class="hidden flex flex-col gap-6">
+        
+        <!-- NEW: End Today Session -->
+        <div class="bg-red-50 rounded-2xl p-5 shadow-sm border border-red-100">
+          <h3 class="font-black mb-3 text-lg text-red-800"><i class="fa-solid fa-power-off mr-1"></i> 당일 모임 종료 (소프트 리셋)</h3>
+          <p class="text-xs text-red-600 font-bold mb-4">현재 화면에 열려있는 모든 대기열과 코트 인원만 텅 비웁니다. 다음날 모임을 새롭게 시작할 때만 누르세요. (안심하세요! 과거 승률과 데이터 게시판 기록은 100% 안전하게 보존됩니다)</p>
+          <button onclick="endTodaySession()" class="w-full bg-red-600 border border-red-700 text-white py-4 rounded-xl text-base font-black shadow-md active:scale-95">오늘 게임 완전 종료 처리</button>
+        </div>
+
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+          <h3 class="font-black mb-4 text-lg">진행 및 보안 설정 <span class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-1 font-bold">Firebase</span></h3>
+          <div class="mb-4">
+            <label class="text-xs font-bold text-gray-400 mb-1 block">공지 메세지</label>
+            <div class="flex gap-2">
+              <input type="text" id="adminNotice" class="flex-1 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-sm outline-none focus:ring-2">
+              <button onclick="saveNotice()" class="bg-dark text-white px-4 rounded-lg text-sm font-bold truncate">저장</button>
+            </div>
+          </div>
+          <div class="mb-5">
+            <label class="text-xs font-bold text-gray-400 mb-1 block">관리자 비밀번호 변경</label>
+            <div class="flex gap-2">
+              <input type="password" id="newAdminPwd" placeholder="새 비밀번호 입력" class="flex-1 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-sm tracking-widest outline-none focus:ring-2">
+              <button onclick="changePassword()" class="bg-dark text-white px-4 rounded-lg text-sm font-bold truncate active:scale-95">변경</button>
+            </div>
+          </div>
+          <div class="p-4 bg-blue-50 rounded-xl border border-blue-100 flex justify-between items-center mb-3">
+            <span class="font-black text-sm text-blue-900">🚀 출석부(대기열 등록) 시스템 오픈</span>
+            <input type="checkbox" id="systemOpenToggle" onchange="toggleSystemOpen()" class="w-6 h-6 rounded text-blue-600 focus:ring-blue-500">
+          </div>
+          <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 flex justify-between items-center">
+            <span class="font-bold text-sm text-gray-800"><span id="specialCourtName">C</span> 코트 임시 예약제한 (레슨 등)</span>
+            <input type="checkbox" id="fCourtToggle" onchange="toggleFCourt()" class="w-6 h-6 rounded text-primary focus:ring-primaryAccent">
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+          <h3 class="font-black mb-4 text-lg">정회원 명단 관리</h3>
+          <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4 flex flex-col gap-2">
+            <input type="text" id="memName" placeholder="이름 (동명이인은 숫자 추가, 예: 홍길동1)" class="px-3 py-2.5 rounded-lg border border-gray-200 text-sm font-bold">
+            <div class="flex gap-2 w-full">
+              <input type="text" id="memDept" placeholder="학회" class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 text-sm">
+              <input type="text" id="memGen" placeholder="기수" class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 text-sm">
+            </div>
+            <div class="flex gap-2 mt-1">
+              <select id="memNtrp" class="w-24 px-3 py-2 rounded-lg border border-gray-200 text-sm font-bold"><option value="2.5" selected>2.5</option><option value="3.0">3.0</option><option value="3.5">3.5</option></select>
+              <button onclick="saveMember()" class="flex-1 bg-accent text-white rounded-lg text-sm font-bold">추가/수정</button>
+            </div>
+          </div>
+          <div class="max-h-60 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50" id="adminMemberList"></div>
+        </div>
+
+        <button onclick="resetData()" class="w-full bg-gray-50 text-gray-500 border border-gray-200 py-4 rounded-2xl text-xs font-bold mt-4">초기화: 서버 DB 자체를 영구 파괴 (절대 주의)</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bg-white border-t border-gray-200 flex justify-around items-center px-1 py-1 pb-safe absolute bottom-0 w-full z-40">
+    <button onclick="switchTab('home')" id="nav-home" class="nav-btn w-20 h-14 text-primary flex flex-col items-center justify-center transition-colors">
+      <i class="fa-solid fa-users text-[22px] mb-1"></i><span class="text-[10px] font-bold">대기/코트</span>
+    </button>
+    <button onclick="switchTab('archive')" id="nav-archive" class="nav-btn w-20 h-14 text-gray-400 flex flex-col items-center justify-center transition-colors">
+      <i class="fa-solid fa-chart-simple text-[22px] mb-1"></i><span class="text-[10px] font-bold">기록/통계</span>
+    </button>
+    <button onclick="switchTab('admin')" id="nav-admin" class="nav-btn w-20 h-14 text-gray-400 flex flex-col items-center justify-center transition-colors">
+      <i class="fa-solid fa-shield-halved text-[22px] mb-1"></i><span class="text-[10px] font-bold">관리자</span>
+    </button>
+  </nav>
+
+  <div id="debugPanel" class="hidden absolute top-0 left-0 w-full h-full bg-gray-900/95 text-green-400 p-5 font-mono text-xs overflow-y-auto z-[100]">
+     <button onclick="this.parentElement.classList.add('hidden')" class="bg-red-500 text-white px-3 py-1 mb-4">닫기</button>
+     <div class="mb-4">Firebase Realtime Sync Enabled v1.0</div>
+     <pre id="debugOutput"></pre>
+  </div>
+  
+  <div id="matchResultModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
+      <h3 class="text-xl font-black text-center mb-5">경기 결과 확정</h3>
+      <div id="modalMatchInfo" class="bg-gray-50 p-4 rounded-xl mb-6 text-center shadow-inner border border-gray-100 text-base font-bold text-gray-800"></div>
+      <div class="flex flex-col gap-3">
+        <button onclick="submitResult('A')" class="bg-blue-50 text-blue-700 py-4 rounded-2xl font-black text-lg border border-blue-200 active:scale-95">A팀 승리</button>
+        <button onclick="submitResult('B')" class="bg-red-50 text-red-700 py-4 rounded-2xl font-black text-lg border border-red-200 active:scale-95">B팀 승리</button>
+        <button onclick="submitResult('D')" class="bg-gray-100 text-gray-600 py-3 rounded-xl font-bold text-base mt-2 active:scale-95">결과 미입력 (무승부)</button>
+        <div class="border-t border-gray-100 my-1"></div>
+        <button onclick="cancelMatchAndRestore()" class="bg-gray-800 text-gray-200 py-3 rounded-xl font-bold text-sm active:scale-95 flex items-center justify-center gap-2 shadow-inner"><i class="fa-solid fa-rotate-left"></i>실수 취소 (대기열 원상 복구)</button>
+        <button onclick="closeModal()" class="text-gray-400 text-sm mt-3 underline">닫기 (모달창만)</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "", // Firebase API Key를 입력하세요 (빈칸이면 로컬 저장소로 작동합니다)
+    authDomain: "", 
+    databaseURL: "", // 중요: Realtime Database URL (형식: https://...firebaseio.com)
+    projectId: "", 
+    storageBucket: "", 
+    messagingSenderId: "", 
+    appId: "" 
+  };
+
+  let app, db;
+  if (firebaseConfig.apiKey) {
+    app = initializeApp(firebaseConfig);
+    db = getDatabase(app);
+  }
+
+  let appState = { notice: `${CONFIG.clubName} 매칭 앱에 환영합니다!`, isFCourtDisabled: false, adminPassword: CONFIG.adminPassword, isSystemOpen: false };
+  let regularMembers = {}; let dailyQueue = []; let historyLog = [];
+  
+  let courts = {};
+  CONFIG.courts.forEach(c => { courts[c] = { status: 'active', playing: null, assignedWaiting: [] }; });
+  let targetCourtId = null;
+  let selectedArchiveDate = null; // null = show full boards list
+
+  const UUID = () => Math.random().toString(36).substring(2, 12);
+  const formatDateStr = (ms) => new Date(ms).toLocaleTimeString('ko-KR', { hour: '2-digit', minute:'2-digit', hour12: false });
+  const getTodayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+
+  // --------------------------------------------------------------------------
+  // FIREBASE REALTIME SYNC
+  // --------------------------------------------------------------------------
+  
+  
+  if (db) {
+    const connectedRef = ref(db, ".info/connected");
+    onValue(connectedRef, (snap) => {
+      const banner = document.getElementById('offlineBanner');
+      if(banner) {
+         if (snap.val() === true) banner.classList.add('hidden');
+         else banner.classList.remove('hidden');
+      }
+    });
+
+    const dbRef = ref(db, 'tennis_data');
+    onValue(dbRef, (snapshot) => {
+      const data = snapshot.val();
+      if(data) {
+         appState = data.appState || appState;
+         regularMembers = data.regularMembers || {};
+         dailyQueue = data.dailyQueue || [];
+         historyLog = data.historyLog || [];
+         if(data.courts) {
+            CONFIG.courts.forEach(c => {
+               if(data.courts[c]) courts[c] = { 
+                  status: data.courts[c].status || 'active', 
+                  playing: data.courts[c].playing || null, 
+                  assignedWaiting: data.courts[c].assignedWaiting || [] 
+               };
+            });
+         }
+         for(let k in regularMembers) { if(!regularMembers[k].name) regularMembers[k].name = k; }
+         renderUI();
+      } else {
+         loadFromLocal();
+         saveData();
+      }
+    });
+  } else {
+    // Firebase 설정 안 된 경우 오프라인 경고 숨기기
+    document.addEventListener('DOMContentLoaded', () => {
+      const banner = document.getElementById('offlineBanner');
+      if(banner) banner.classList.add('hidden');
+      loadFromLocal();
+      renderUI();
+    });
+  }
+
+  function loadFromLocal() {
+    const rw = localStorage.getItem('club_tennis_data');
+    if(rw) {
+       const p = JSON.parse(rw);
+       if(p.appState) appState = p.appState;
+       if(p.regularMembers) regularMembers = p.regularMembers;
+       if(p.dailyQueue) dailyQueue = p.dailyQueue;
+       if(p.courts) {
+         CONFIG.courts.forEach(c => {
+            if(p.courts[c]) {
+               courts[c].status = p.courts[c].status;
+               courts[c].playing = p.courts[c].playing;
+               courts[c].assignedWaiting = p.courts[c].assignedWaiting || [];
+            }
+         });
+       }
+       if(p.historyLog) historyLog = p.historyLog;
+    }
+  }
+
+  function saveData() { 
+    if (db) set(ref(db, 'tennis_data'), { appState, regularMembers, dailyQueue, courts, historyLog }); 
+    localStorage.setItem('club_tennis_data', JSON.stringify({ appState, regularMembers, dailyQueue, courts, historyLog }));
+  }
+
+  // --------------------------------------------------------------------------
+  // UI & LOGIC FUNCTIONS
+  // --------------------------------------------------------------------------
+  function switchTab(name) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.getElementById(`tab-${name}`).classList.add('active');
+    document.querySelectorAll('.nav-btn').forEach(el => { el.classList.remove('text-primary'); el.classList.add('text-gray-400'); });
+    document.getElementById(`nav-${name}`).classList.remove('text-gray-400'); document.getElementById(`nav-${name}`).classList.add('text-primary');
+    renderUI();
+  }
+  
+  function renderUI() {
+    document.getElementById('noticeText').innerText = appState.notice;
+    const specialC = CONFIG.courts[CONFIG.courts.length - 1];
+    if (courts[specialC]) courts[specialC].status = appState.isFCourtDisabled ? 'disabled' : 'active';
+    
+    // 시스템 오픈 여부에 따라 등록창 토글
+    if(appState.isSystemOpen) {
+       document.getElementById('regFormArea').classList.remove('hidden');
+       document.getElementById('regClosedArea').classList.add('hidden');
+    } else {
+       document.getElementById('regFormArea').classList.add('hidden');
+       document.getElementById('regClosedArea').classList.remove('hidden');
+    }
+
+    renderCourts(); renderDailyQueue(); renderArchive(); renderAdmin();
+  }
+
+  function registerQueue() {
+    let baseName = document.getElementById('regName').value.trim();
+    const ntrp = parseFloat(document.getElementById('regNtrp').value);
+    if(!baseName) return alert("이름을 입력하세요.");
+    if(dailyQueue.some(q => q.name === baseName)) return alert("이미 대기열에 있습니다.");
+    
+    let isCourt = false;
+    CONFIG.courts.forEach(cId => {
+       const cd = courts[cId];
+       if(cd.playing && [...cd.playing.teamA, ...cd.playing.teamB].some(p=>p.name===baseName)) isCourt = true;
+       if(cd.assignedWaiting.some(p=>p.name===baseName)) isCourt = true;
+    });
+    if(isCourt) return alert("현재 코트에 배정되어 있습니다.");
+
+    if(!regularMembers[baseName]) { regularMembers[baseName] = { name: baseName, dept: '', gen: '', ntrp, stats: { totalMatches: 0, win: 0, lose: 0 }}; }
+    const ts = Date.now();
+    dailyQueue.push({ id: UUID(), name: baseName, ntrp, round: 1, joinTime: ts, origTime: ts });
+    document.getElementById('regName').value = '';
+    
+    saveData(); 
+  }
+
+  function renderDailyQueue() {
+    const cont = document.getElementById('dailyQueueContainer');
+    document.getElementById('queueTotalCount').innerText = dailyQueue.length;
+    
+    let cSlots = {D:0,E:0,F:0}; let totalSlots = 0;
+    CONFIG.courts.forEach(c => {
+       if(courts[c].status === 'disabled') return;
+       let avail = courts[c].playing ? 0 : (4 - courts[c].assignedWaiting.length);
+       if(avail > 0) { cSlots[c] = avail; totalSlots += avail; }
+    });
+
+    if(dailyQueue.length === 0) {
+      cont.innerHTML = `<div class="text-center py-10 bg-white border border-gray-200 rounded-2xl text-gray-400 font-bold shadow-sm">기다리는 대기자가 없습니다.</div>`;
+      return;
+    }
+
+    dailyQueue.sort((a,b) => a.round !== b.round ? a.round - b.round : a.joinTime - b.joinTime);
+
+    let html = ''; let curRnd = -1;
+    dailyQueue.forEach((q, idx) => {
+      if(q.round !== curRnd) {
+        curRnd = q.round;
+        html += `<div class="mt-4 mb-2"><span class="bg-gray-800 text-white font-bold px-3 py-1 text-xs shadow rounded">라운드 ${curRnd}</span></div>`;
+      }
+
+      let hasPri = (idx === 0) && (totalSlots > 0);
+
+      let btnHtml = '';
+      let cardClass = "bg-white border-white"; 
+      let nameClass = "text-gray-800";
+      
+      if(hasPri) {
+         cardClass = "bg-blue-50 border-blue-400"; 
+         nameClass = "text-blue-900";
+         let sc = '';
+         CONFIG.courts.forEach(cId => {
+            if(cSlots[cId] > 0) sc += `<button onclick="assignToCourt('${q.id}', '${cId}')" class="flex-1 bg-white border border-blue-200 text-blue-700 py-3 rounded-xl font-black text-sm shadow-sm active:scale-95 whitespace-nowrap px-1">🎾 ${cId} 코트</button>`;
+         });
+         btnHtml = `
+         <div class="mt-4 pt-4 border-t border-blue-200">
+           <p class="text-xs font-black text-blue-800 mb-3 text-center w-full bg-blue-100 py-1.5 rounded-lg animate-pulse">☝️회원님의 선택 차례입니다. 코트나 패스를 눌러주세요.</p>
+           <div class="flex flex-wrap sm:flex-nowrap gap-2">
+             ${sc}
+             <button onclick="passTurn('${q.id}')" class="flex-1 sm:flex-none bg-gray-300 text-gray-700 py-3 px-3 rounded-xl font-bold text-sm shadow-sm active:scale-95 text-center px-1 whitespace-nowrap">패스 (양보)</button>
+           </div>
+         </div>`;
+      }
+
+      html += `
+        <div class="rounded-2xl p-5 shadow-md border-2 ${cardClass} relative mb-3">
+           <div class="flex items-center justify-between">
+             <div class="flex items-center gap-3">
+               <div class="w-8 h-8 rounded-full ${hasPri ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'} flex items-center justify-center font-black text-sm shrink-0">${idx+1}</div>
+               <div>
+                 <div class="text-base font-black ${nameClass} flex items-center gap-2">${q.name} <span class="bg-white/50 border border-gray-200 px-2 py-0.5 rounded text-xs">N.${q.ntrp}</span></div>
+                 <div class="text-xs text-gray-500 mt-0.5 font-medium">${formatDateStr(q.origTime)} 합류</div>
+               </div>
+             </div>
+             ${!hasPri ? `<button onclick="removeQueue('${q.id}')" class="w-8 h-8 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full shrink-0 flex items-center justify-center border border-gray-100"><i class="fa-solid fa-xmark"></i></button>` : ''}
+           </div>
+           ${btnHtml}
+        </div>
+      `;
+    });
+    cont.innerHTML = html;
+  }
+
+  function removeQueue(id) { dailyQueue = dailyQueue.filter(q => q.id !== id); saveData(); }
+  function passTurn(id) { const q = dailyQueue.find(x => x.id === id); if(q) { q.joinTime = Date.now(); saveData(); } }
+
+  function assignToCourt(pId, cId) {
+    const idx = dailyQueue.findIndex(x => x.id === pId); if(idx === -1) return;
+    const player = dailyQueue.splice(idx, 1)[0];
+    courts[cId].assignedWaiting.push(player);
+    if(courts[cId].assignedWaiting.length === 4) formMatch(cId);
+    saveData(); 
+  }
+
+  function formMatch(cId) {
+     const plrs = courts[cId].assignedWaiting.splice(0, 4);
+     plrs.sort((a,b) => b.ntrp - a.ntrp); 
+     courts[cId].playing = { id: UUID(), round: plrs[0].round, teamA: [plrs[0], plrs[3]], teamB: [plrs[1], plrs[2]], startTime: Date.now() };
+  }
+
+  function cancelAssignment(cId, pId) {
+     const idx = courts[cId].assignedWaiting.findIndex(x => x.id === pId);
+     if(idx > -1) { dailyQueue.push(courts[cId].assignedWaiting.splice(idx, 1)[0]); saveData(); }
+  }
+
+  function renderCourts() {
+    const cont = document.getElementById('courtsContainer');
+    let html = '';
+    CONFIG.courts.forEach(cId => {
+       const cd = courts[cId];
+       if(cd.status === 'disabled') {
+          html += `<div class="bg-gray-100 border border-gray-200 rounded-2xl p-5 flex justify-between items-center opacity-70"><span class="font-black text-gray-400 text-lg">${cId} 코트</span><span class="text-xs font-bold text-gray-500 bg-white px-2 py-1 rounded">예약불가</span></div>`;
+          return;
+       }
+
+       let cBody = '';
+       if(cd.playing) {
+         let p = cd.playing;
+         cBody += `
+           <div class="bg-emerald-50 border-2 border-emerald-400 rounded-xl p-4 shadow-sm mt-3">
+             <div class="flex justify-between items-center mb-3">
+                <span class="text-xs font-black text-emerald-700 bg-white px-3 py-1 rounded-full shadow-sm">🎾 게임 진행중</span>
+                <span class="text-xs text-emerald-700 font-bold opacity-80">${formatDateStr(p.startTime)} 시작</span>
+             </div>
+             <div class="flex justify-between items-center bg-white rounded-xl p-4 shadow-inner mb-4">
+                <div class="text-center font-bold text-sm text-gray-800 flex-1 leading-relaxed">${p.teamA[0].name}<br>${p.teamA[1].name}</div>
+                <div class="text-xs text-red-500 font-black italic px-2">VS</div>
+                <div class="text-center font-bold text-sm text-gray-800 flex-1 leading-relaxed">${p.teamB[0].name}<br>${p.teamB[1].name}</div>
+             </div>
+             <button onclick="openEndMatchModal('${cId}')" class="w-full bg-dark text-white hover:bg-black py-4 rounded-xl text-sm font-black shadow-lg active:scale-95">결과 입력 및 코트 비우기</button>
+           </div>
+         `;
+       } else {
+         if(cd.assignedWaiting.length > 0) {
+            cBody += `<div class="mt-4 bg-white border border-blue-200 rounded-xl p-3 shadow-inner">
+               <div class="text-sm font-black text-blue-600 mb-2 text-center bg-blue-50 py-1.5 rounded-lg border border-blue-100">멤버 모집중 (${cd.assignedWaiting.length}/4)</div>
+               <div class="flex flex-wrap gap-2 justify-center">`;
+            cd.assignedWaiting.forEach(w => {
+               cBody += `<div class="bg-gray-100 text-gray-800 font-bold px-3 py-2 rounded-lg shadow-sm text-sm flex gap-2 items-center">${w.name}<button onclick="cancelAssignment('${cId}', '${w.id}')" class="text-gray-400 hover:text-red-500 ml-1 active:scale-90"><i class="fa-solid fa-xmark"></i></button></div>`;
+            });
+            cBody += `</div></div>`;
+         } else {
+            cBody += `<div class="text-center py-8 mt-3 bg-white border border-dashed border-gray-300 rounded-xl text-sm font-bold text-gray-400 shadow-sm leading-relaxed">빈 코트 대기중<br><span class="text-xs font-normal">아래 대기 명단에서 코트를 선택해 주세요</span></div>`;
+         }
+       }
+
+       html += `
+         <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-200">
+            <h3 class="font-black text-gray-800 text-lg flex items-center gap-2"><div class="bg-primary text-white w-7 h-7 flex items-center justify-center rounded-lg text-sm">${cId}</div> 코트</h3>
+            ${cBody}
+         </div>
+       `;
+    });
+    cont.innerHTML = html;
+  }
+
+  function openEndMatchModal(cId) {
+     targetCourtId = cId; const m = courts[cId].playing;
+     document.getElementById('modalMatchInfo').innerHTML = `
+       <div class="flex justify-between mb-2"><div class="text-blue-600 font-black">A팀</div><div class="text-red-600 font-black">B팀</div></div>
+       <div class="flex justify-between"><div class="text-left">${m.teamA[0].name}<br>${m.teamA[1].name}</div><div class="text-gray-300">VS</div><div class="text-right">${m.teamB[0].name}<br>${m.teamB[1].name}</div></div>
+     `;
+     document.getElementById('matchResultModal').classList.remove('hidden');
+  }
+  function closeModal() { document.getElementById('matchResultModal').classList.add('hidden'); targetCourtId = null; }
+
+  function submitResult(res) {
+     if(!targetCourtId) return;
+     const cId = targetCourtId; const m = courts[cId].playing;
+     
+     historyLog.unshift({ id: m.id, date: getTodayStr(), court: cId, winner: res, teamA: m.teamA.map(x=>x.name), teamB: m.teamB.map(x=>x.name), completedAt: Date.now() });
+
+     const udp = (pl, w) => {
+        let p = regularMembers[pl.name];
+        if(!p) return;
+        p.stats.totalMatches++;
+        if(w==='win') p.stats.win++;
+        if(w==='lose') p.stats.lose++;
+     };
+     m.teamA.forEach(p => udp(p, res==='A'?'win':(res==='B'?'lose':'draw')));
+     m.teamB.forEach(p => udp(p, res==='B'?'win':(res==='A'?'lose':'draw')));
+
+     const ts = Date.now();
+     [...m.teamA, ...m.teamB].forEach(p => { p.round += 1; p.joinTime = ts; p.origTime = ts; dailyQueue.push(p); });
+
+     courts[cId].playing = null;
+     closeModal();
+     saveData(); 
+  }
+
+  function cancelMatchAndRestore() {
+     if(!targetCourtId) return;
+     if(!confirm("진행 중인 경기를 취소하고 4명을 기존 순서 그대로 원상 복구하시겠습니까? (기록은 남지 않습니다)")) return;
+     
+     const cId = targetCourtId; 
+     const m = courts[cId].playing;
+     
+     [...m.teamA, ...m.teamB].forEach(p => { dailyQueue.push(p); });
+     
+     courts[cId].playing = null;
+     closeModal();
+     saveData(); 
+  }
+
+  function renderArchive() {
+     const clast = document.getElementById('archiveMatches');
+     
+     if(!selectedArchiveDate) {
+        // --- 모임 카드 리스트 ---
+        const dates = [...new Set(historyLog.map(h => h.date))].sort((a,b) => b.localeCompare(a));
+        if(dates.length === 0) {
+           clast.innerHTML = `<div class="p-6 text-center text-gray-400 bg-white border border-gray-100 rounded-2xl text-sm font-bold shadow-sm">진행된 테니스 모임 기록이 없습니다.</div>`;
+        } else {
+           clast.innerHTML = dates.map(d => {
+              const mlist = historyLog.filter(h => h.date === d);
+              const players = new Set();
+              mlist.forEach(m => { m.teamA.forEach(n => players.add(n)); m.teamB.forEach(n => players.add(n)); });
+              
+              return `
+              <div onclick="selectArchiveDate('${d}')" class="bg-white rounded-2xl p-5 shadow-sm border border-gray-200 mb-3 active:scale-95 cursor-pointer transition-transform flex justify-between items-center group">
+                 <div>
+                    <h4 class="font-black text-lg text-gray-800 mb-2">${d} 모임</h4>
+                    <span class="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded inline-block">참석 ${players.size}명</span>
+                    <span class="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded inline-block ml-1">진행 ${mlist.length}경기</span>
+                 </div>
+                 <i class="fa-solid fa-chevron-right text-gray-300 group-hover:text-primary text-xl"></i>
+              </div>`;
+           }).join('');
+        }
+     } else {
+        // --- 특정 날짜 요약 게시판 ---
+        const d = selectedArchiveDate;
+        const mlist = historyLog.filter(h => h.date === d);
+        const players = new Set();
+        mlist.forEach(m => { m.teamA.forEach(n => players.add(n)); m.teamB.forEach(n => players.add(n)); });
+        
+        let playerNames = [...players].sort().map(n => {
+           const p = regularMembers[n];
+           const ntrp = p ? p.ntrp : '?';
+           return `<span class="bg-white text-blue-800 text-xs font-black px-2.5 py-1.5 rounded-lg border border-blue-100 shadow-sm inline-block mb-1.5 mr-1.5">${n} <span class="text-blue-400 opacity-80">N.${ntrp}</span></span>`;
+        }).join('');
+
+        let html = `
+        <button onclick="selectArchiveDate(null)" class="mb-4 text-sm font-bold text-gray-600 bg-white border border-gray-200 shadow-sm px-4 py-2.5 rounded-xl active:scale-95 flex items-center"><i class="fa-solid fa-arrow-left mr-2"></i>목록으로 돌아가기</button>
+        
+        <div class="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-5 shadow-sm relative overflow-hidden">
+           <div class="absolute -right-5 -bottom-5 text-blue-200 opacity-30 text-[80px]"><i class="fa-solid fa-users"></i></div>
+           <h3 class="font-black text-xl text-blue-900 mb-1">${d} 모임 요약</h3>
+           <div class="text-sm text-blue-700 font-bold mb-4 opacity-90">당일 매치 참여자 총 ${players.size}명</div>
+           <div class="relative z-10">${playerNames}</div>
+        </div>
+
+        <h3 class="font-black text-lg text-gray-800 mb-3 px-1">총 ${mlist.length}경기 결과</h3>
+        `;
+
+        if(mlist.length===0) html += `<div class="p-6 text-center text-gray-400 bg-white border border-gray-100 rounded-2xl text-sm font-bold shadow-sm">기록이 없습니다.</div>`;
+        else {
+           html += mlist.map(h => {
+              let bw = h.winner==='A' ? 'A 승리' : h.winner==='B' ? 'B 승리' : '무승부';
+              let badge = h.winner==='A' ? 'bg-blue-50 text-blue-700 border-blue-200' : h.winner==='B' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-gray-100 text-gray-600';
+              return `
+              <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-200 mb-2">
+                <div class="flex justify-between items-center mb-3">
+                  <span class="text-gray-500 font-bold text-xs"><span class="bg-gray-200 text-gray-700 px-2 py-1 rounded shadow-sm mr-2">${h.court}</span>${formatDateStr(h.completedAt)}</span>
+                  <span class="${badge} px-2 py-1 rounded text-xs font-black border tracking-wide">${bw}</span>
+                </div>
+                <div class="flex gap-2 text-sm font-black text-center text-gray-800">
+                  <div class="flex-1 bg-gray-50 py-3 rounded-xl border border-gray-100">${h.teamA.join(', ')}</div>
+                  <div class="text-xs text-red-300 italic pt-3 px-1">VS</div>
+                  <div class="flex-1 bg-gray-50 py-3 rounded-xl border border-gray-100">${h.teamB.join(', ')}</div>
+                </div>
+              </div>`;
+           }).join('');
+        }
+        clast.innerHTML = html;
+     }
+
+     const sb = document.getElementById('statsTableBody');
+     const arr = Object.values(regularMembers).filter(m => m.stats && m.stats.totalMatches > 0).sort((a,b) => b.stats.totalMatches - a.stats.totalMatches);
+     if(arr.length===0) sb.innerHTML = `<tr><td colspan="3" class="text-center py-6 text-gray-400 text-sm font-bold">기록이 없습니다.</td></tr>`;
+     else {
+        sb.innerHTML = arr.map(m => {
+           let r = Math.round((m.stats.win / m.stats.totalMatches)*100) || 0;
+           return `<tr><td class="px-4 py-4"><div class="font-black text-sm text-gray-800">${m.name}<span class="text-xs text-gray-400 ml-2 font-normal">${m.dept}</span></div></td>
+              <td class="px-3 py-4 text-center text-xs font-bold text-gray-500">${m.stats.totalMatches}전 ${m.stats.win}승</td>
+              <td class="px-4 py-4 text-right text-base font-black text-gray-800">${r}%</td></tr>`;
+        }).join('');
+     }
+  }
+
+  function selectArchiveDate(d) {
+     selectedArchiveDate = d;
+     renderArchive();
+  }
+
+  function endTodaySession() {
+     if(confirm("오늘 모임을 최종 종료하시겠습니까?\n대기열과 코트 현황만 초기화되며 과거 기록, 승률 통계, 명단 등은 영구 보존됩니다.")) {
+        dailyQueue = [];
+        CONFIG.courts.forEach(c => {
+           courts[c].playing = null;
+           courts[c].assignedWaiting = [];
+        });
+        appState.isSystemOpen = false; // 자동 마감
+        saveData();
+        alert("오늘의 일정이 모두 비워지고 출석부가 마감되었습니다. 다음 모임 시 시스템을 오픈해주세요!");
+     }
+  }
+
+  function loginAdmin() {
+    if(document.getElementById('adminPwd').value === appState.adminPassword) { document.getElementById('adminLoginBlock').classList.add('hidden'); document.getElementById('adminSettingsBlock').classList.remove('hidden'); renderAdmin(); } else alert("비밀번호 불일치.");
+    document.getElementById('adminPwd').value = '';
+  }
+  function saveNotice() { appState.notice = document.getElementById('adminNotice').value; saveData(); }
+  function toggleFCourt() { appState.isFCourtDisabled = document.getElementById('fCourtToggle').checked; saveData(); }
+  function toggleSystemOpen() { appState.isSystemOpen = document.getElementById('systemOpenToggle').checked; saveData(); }
+  function changePassword() {
+     const np = document.getElementById('newAdminPwd').value.trim();
+     if(!np) return alert("새 비밀번호를 입력하세요.");
+     if(confirm(`보안 비밀번호를 [${np}]로 완전히 변경하시겠습니까?`)) { 
+        appState.adminPassword = np; 
+        saveData(); 
+        document.getElementById('newAdminPwd').value=''; 
+        alert("비밀번호가 안전하게 변경되었습니다. 모든 기기에 반영됩니다."); 
+     }
+  }
+  
+  function renderAdmin() {
+     document.getElementById('adminNotice').value = appState.notice;
+     document.getElementById('fCourtToggle').checked = appState.isFCourtDisabled;
+     document.getElementById('systemOpenToggle').checked = !!appState.isSystemOpen;
+     const list = document.getElementById('adminMemberList');
+     const keys = Object.keys(regularMembers).sort();
+     if(keys.length===0) list.innerHTML = `<div class="p-6 text-center text-gray-400 text-xs font-bold">정회원이 없습니다.</div>`;
+     else {
+        list.innerHTML = keys.map(k => {
+           let m = regularMembers[k];
+           return `<div class="px-4 py-3 flex justify-between items-center hover:bg-gray-50"><div class="font-black text-sm text-gray-800">${m.name} <span class="bg-gray-200 text-xs px-2 py-0.5 rounded text-gray-600 ml-1">N. ${m.ntrp}</span></div><button onclick="delMember('${k}')" class="text-red-500 text-xl"><i class="fa-solid fa-trash"></i></button></div>`;
+        }).join('');
+     }
+  }
+  function saveMember() {
+     const n = document.getElementById('memName').value.trim();
+     if(!n) return alert("이름 필수");
+     if(!regularMembers[n]) regularMembers[n] = { name: n, dept:'', gen:'', ntrp:2.5, stats:{totalMatches:0,win:0,lose:0} };
+     regularMembers[n].dept = document.getElementById('memDept').value.trim(); regularMembers[n].gen = document.getElementById('memGen').value.trim(); regularMembers[n].ntrp = parseFloat(document.getElementById('memNtrp').value);
+     saveData(); 
+     ['memName','memDept','memGen'].forEach(id => document.getElementById(id).value = '');
+  }
+  function delMember(n) { if(confirm("삭제하시겠습니까?")) { delete regularMembers[n]; saveData(); } }
+  function resetData() { if(confirm("파이어베이스 서버의 데이터를 완전히 삭제합니다. 과거 기록 복구 불가. 진행?")) { set(ref(db, 'tennis_data'), null); } }
+
+  // --------------------------------------------------------------------------
+  // BIND GLOBALS FOR HTML ONCLICK CALLS
+  // --------------------------------------------------------------------------
+  window.switchTab = switchTab;
+  window.registerQueue = registerQueue;
+  window.removeQueue = removeQueue;
+  window.passTurn = passTurn;
+  window.assignToCourt = assignToCourt;
+  window.cancelAssignment = cancelAssignment;
+  window.openEndMatchModal = openEndMatchModal;
+  window.closeModal = closeModal;
+  window.submitResult = submitResult;
+  window.cancelMatchAndRestore = cancelMatchAndRestore;
+  window.renderArchive = renderArchive;
+  window.selectArchiveDate = selectArchiveDate;
+  window.loginAdmin = loginAdmin;
+  window.saveNotice = saveNotice;
+  window.toggleFCourt = toggleFCourt;
+  window.toggleSystemOpen = toggleSystemOpen;
+  window.changePassword = changePassword;
+  window.saveMember = saveMember;
+  window.delMember = delMember;
+  window.resetData = resetData;
+  window.endTodaySession = endTodaySession;
+  window.dumpDebug = () => { document.getElementById('debugOutput').innerText = JSON.stringify({appState, regularMembers, dailyQueue, courts, historyLog}, null, 2); };
+
+</script>
+</body>
+</html>
