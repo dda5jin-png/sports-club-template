@@ -172,9 +172,12 @@
           </div>
           <div class="mb-5">
             <label class="text-xs font-bold text-gray-400 mb-1 block">관리자 비밀번호 변경</label>
-            <div class="flex gap-2">
-              <input type="password" id="newAdminPwd" placeholder="새 비밀번호 입력" class="flex-1 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200 text-sm tracking-widest outline-none focus:ring-2">
-              <button onclick="changePassword()" class="bg-dark text-white px-4 rounded-lg text-sm font-bold truncate active:scale-95">변경</button>
+            <div class="flex flex-col gap-2">
+              <div class="flex gap-2">
+                <input type="password" id="newAdminPwd" placeholder="데모 버전 변경 불가" disabled class="flex-1 px-3 py-2.5 rounded-lg bg-gray-100 border border-gray-200 text-sm tracking-widest outline-none opacity-50 cursor-not-allowed">
+                <button onclick="changePassword()" class="bg-gray-400 text-white px-4 rounded-lg text-sm font-bold truncate cursor-not-allowed">변경</button>
+              </div>
+              <p class="text-[10px] text-red-500 font-bold"><i class="fa-solid fa-circle-info mr-1"></i> 데모 버전은 보안상 비밀번호 변경 기능이 제한됩니다.</p>
             </div>
           </div>
           <div class="p-4 bg-blue-50 rounded-xl border border-blue-100 flex justify-between items-center mb-3">
@@ -715,14 +718,7 @@
   function toggleFCourt() { appState.isFCourtDisabled = document.getElementById('fCourtToggle').checked; saveData(); }
   function toggleSystemOpen() { appState.isSystemOpen = document.getElementById('systemOpenToggle').checked; saveData(); }
   function changePassword() {
-     const np = document.getElementById('newAdminPwd').value.trim();
-     if(!np) return alert("새 비밀번호를 입력하세요.");
-     if(confirm(`보안 비밀번호를 [${np}]로 완전히 변경하시겠습니까?`)) { 
-        appState.adminPassword = np; 
-        saveData(); 
-        document.getElementById('newAdminPwd').value=''; 
-        alert("비밀번호가 안전하게 변경되었습니다. 모든 기기에 반영됩니다."); 
-     }
+     alert("⚠️ 데모 버전 제한 안내\n\n현재 보시는 화면은 데모/템플릿 버전으로, 보안을 위해 관리자 비밀번호 변경 기능이 비활성화되어 있습니다.\n\n실제 서비스 도입 시에는 자유롭게 변경하여 사용하실 수 있습니다.");
   }
   
   function renderAdmin() {
