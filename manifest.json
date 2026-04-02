@@ -1,0 +1,17 @@
+{
+  "name": "Matchmaker Sports Club",
+  "short_name": "Matchmaker",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#10B981",
+  "description": "매치메이커 동호회 매칭 시스템",
+  "icons": [
+    {
+      "src": "logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
