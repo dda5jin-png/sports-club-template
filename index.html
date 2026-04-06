@@ -18,6 +18,11 @@
       clubSubtitle: "소속 및 설명", // 타이틀 아래에 작게 표시될 설명 (예: 건국대 부동산대학원 테니스동아리)
       sport: "테니스", // 종목 이름 (예: 테니스, 배드민턴)
       courts: ["A", "B", "C"], // 사용할 코트(또는 테이블) 이름들을 배열로 입력하세요
+      courtTeams: {
+        A: ["A팀 알파", "A팀 브라보"],
+        B: ["B팀 알파", "B팀 브라보"],
+        C: ["C팀 알파", "C팀 브라보"]
+      }, // 코트별 팀명. 비워두면 "A코트 A팀 / B팀"처럼 기본값이 적용됩니다.
       adminPassword: "0000", // 관리자 화면 접속을 위한 기본 비밀번호
       primaryColor: "#10B981" // 앱의 메인 테마 색상 (HEX 코드)
     };
@@ -338,7 +343,15 @@
   let regularMembers = {}; let dailyQueue = []; let historyLog = []; let lessonQueue = []; let manualAttendance = [];
   
   let courts = {};
-  CONFIG.courts.forEach(c => { courts[c] = { status: 'active', playing: null, assignedWaiting: [] }; });
+  function getCourtTeamNames(courtId) {
+    const configured = CONFIG.courtTeams?.[courtId];
+    if (Array.isArray(configured) && configured.length >= 2) return configured;
+    return [`${courtId}코트 A팀`, `${courtId}코트 B팀`];
+  }
+  CONFIG.courts.forEach(c => {
+    const [teamAName, teamBName] = getCourtTeamNames(c);
+    courts[c] = { status: 'active', playing: null, waitingA: [], waitingB: [], teamAName, teamBName };
+  });
   let targetCourtId = null;
   let selectedArchiveDate = null; // null = show full boards list
   let archiveDisplayLimit = 3;
@@ -346,6 +359,29 @@
   const UUID = () => Math.random().toString(36).substring(2, 12);
   const formatDateStr = (ms) => new Date(ms).toLocaleTimeString('ko-KR', { hour: '2-digit', minute:'2-digit', hour12: false });
   const getTodayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+  const getCourtWaitingCount = (court) => (court.waitingA?.length || 0) + (court.waitingB?.length || 0);
+  function normalizeCourtState(court, fallback) {
+    const legacyWaiting = court?.assignedWaiting || [];
+    const waitingA = Array.isArray(court?.waitingA) ? [...court.waitingA] : [];
+    const waitingB = Array.isArray(court?.waitingB) ? [...court.waitingB] : [];
+
+    if (legacyWaiting.length > 0 && waitingA.length === 0 && waitingB.length === 0) {
+      legacyWaiting.forEach((player, index) => {
+        if (index % 2 === 0 && waitingA.length < 2) waitingA.push(player);
+        else if (waitingB.length < 2) waitingB.push(player);
+        else waitingA.push(player);
+      });
+    }
+
+    return {
+      status: court?.status || 'active',
+      playing: court?.playing || null,
+      waitingA,
+      waitingB,
+      teamAName: fallback.teamAName,
+      teamBName: fallback.teamBName
+    };
+  }
 
   // --------------------------------------------------------------------------
   // FIREBASE REALTIME SYNC
@@ -374,11 +410,7 @@
          manualAttendance = data.manualAttendance || [];
          if(data.courts) {
             CONFIG.courts.forEach(c => {
-               if(data.courts[c]) courts[c] = { 
-                  status: data.courts[c].status || 'active', 
-                  playing: data.courts[c].playing || null, 
-                  assignedWaiting: data.courts[c].assignedWaiting || [] 
-               };
+               if(data.courts[c]) courts[c] = normalizeCourtState(data.courts[c], courts[c]);
             });
          }
          for(let k in regularMembers) { if(!regularMembers[k].name) regularMembers[k].name = k; }
@@ -408,9 +440,7 @@
        if(p.courts) {
          CONFIG.courts.forEach(c => {
             if(p.courts[c]) {
-               courts[c].status = p.courts[c].status;
-               courts[c].playing = p.courts[c].playing;
-               courts[c].assignedWaiting = p.courts[c].assignedWaiting || [];
+               courts[c] = normalizeCourtState(p.courts[c], courts[c]);
             }
          });
        }
@@ -484,7 +514,7 @@
     CONFIG.courts.forEach(cId => {
        const cd = courts[cId];
        if(cd.playing && [...cd.playing.teamA, ...cd.playing.teamB].some(p=>p.name===baseName)) isCourt = true;
-       if(cd.assignedWaiting.some(p=>p.name===baseName)) isCourt = true;
+       if([...cd.waitingA, ...cd.waitingB].some(p=>p.name===baseName)) isCourt = true;
     });
     if(isCourt) return alert("현재 코트에 배정되어 있습니다.");
 
@@ -503,7 +533,7 @@
     let cSlots = {}; let totalSlots = 0;
     CONFIG.courts.forEach(c => {
        if(courts[c].status === 'disabled') return;
-       let avail = courts[c].playing ? 0 : (4 - courts[c].assignedWaiting.length);
+       let avail = courts[c].playing ? 0 : (4 - getCourtWaitingCount(courts[c]));
        if(avail > 0) { cSlots[c] = avail; totalSlots += avail; }
     });
 
@@ -532,7 +562,15 @@
          nameClass = "text-blue-900";
          let sc = '';
          CONFIG.courts.forEach(cId => {
-            if(cSlots[cId] > 0) sc += `<button onclick="assignToCourt('${q.id}', '${cId}')" class="flex-1 bg-white border border-blue-200 text-blue-700 py-3 rounded-xl font-black text-sm shadow-sm active:scale-95 whitespace-nowrap px-1">🎾 ${cId} 코트</button>`;
+            const court = courts[cId];
+            if(cSlots[cId] > 0) {
+              if(court.waitingA.length < 2) {
+                sc += `<button onclick="assignToCourt('${q.id}', '${cId}', 'A')" class="flex-1 min-w-[140px] bg-white border border-blue-200 text-blue-700 py-3 rounded-xl font-black text-sm shadow-sm active:scale-95 px-2">🎾 ${cId}코트 ${court.teamAName}<span class="block text-[11px] font-bold text-blue-500 mt-1">${court.waitingA.length}/2 대기</span></button>`;
+              }
+              if(court.waitingB.length < 2) {
+                sc += `<button onclick="assignToCourt('${q.id}', '${cId}', 'B')" class="flex-1 min-w-[140px] bg-white border border-rose-200 text-rose-700 py-3 rounded-xl font-black text-sm shadow-sm active:scale-95 px-2">🎾 ${cId}코트 ${court.teamBName}<span class="block text-[11px] font-bold text-rose-500 mt-1">${court.waitingB.length}/2 대기</span></button>`;
+              }
+            }
          });
          btnHtml = `
          <div class="mt-4 pt-4 border-t border-blue-200">
@@ -588,23 +626,29 @@
   function removeQueue(id) { dailyQueue = dailyQueue.filter(q => q.id !== id); saveData(); }
   function passTurn(id) { const q = dailyQueue.find(x => x.id === id); if(q) { q.joinTime = Date.now(); saveData(); } }
 
-  function assignToCourt(pId, cId) {
+  function assignToCourt(pId, cId, team) {
     const idx = dailyQueue.findIndex(x => x.id === pId); if(idx === -1) return;
+    if(courts[cId].playing) return;
+    if(team === 'A' && courts[cId].waitingA.length >= 2) return;
+    if(team === 'B' && courts[cId].waitingB.length >= 2) return;
     const player = dailyQueue.splice(idx, 1)[0];
-    courts[cId].assignedWaiting.push(player);
-    if(courts[cId].assignedWaiting.length === 4) formMatch(cId);
+    if(team === 'A') courts[cId].waitingA.push(player);
+    else courts[cId].waitingB.push(player);
+    if(courts[cId].waitingA.length === 2 && courts[cId].waitingB.length === 2) formMatch(cId);
     saveData(); 
   }
 
   function formMatch(cId) {
-     const plrs = courts[cId].assignedWaiting.splice(0, 4);
-     plrs.sort((a,b) => b.ntrp - a.ntrp); 
-     courts[cId].playing = { id: UUID(), round: plrs[0].round, teamA: [plrs[0], plrs[3]], teamB: [plrs[1], plrs[2]], startTime: Date.now() };
+     const tA = courts[cId].waitingA.splice(0, 2);
+     const tB = courts[cId].waitingB.splice(0, 2);
+     courts[cId].playing = { id: UUID(), round: tA[0].round, teamA: tA, teamB: tB, startTime: Date.now() };
   }
 
   function cancelAssignment(cId, pId) {
-     const idx = courts[cId].assignedWaiting.findIndex(x => x.id === pId);
-     if(idx > -1) { dailyQueue.push(courts[cId].assignedWaiting.splice(idx, 1)[0]); saveData(); }
+     let idx = courts[cId].waitingA.findIndex(x => x.id === pId);
+     if(idx > -1) { dailyQueue.push(courts[cId].waitingA.splice(idx, 1)[0]); saveData(); return; }
+     idx = courts[cId].waitingB.findIndex(x => x.id === pId);
+     if(idx > -1) { dailyQueue.push(courts[cId].waitingB.splice(idx, 1)[0]); saveData(); }
   }
 
   function renderCourts() {
@@ -627,24 +671,38 @@
                 <span class="text-xs text-emerald-700 font-bold opacity-80">${formatDateStr(p.startTime)} 시작</span>
              </div>
              <div class="flex justify-between items-center bg-white rounded-xl p-4 shadow-inner mb-4">
-                <div class="text-center font-bold text-sm text-gray-800 flex-1 leading-relaxed">${p.teamA[0].name}<br>${p.teamA[1].name}</div>
+                <div class="text-center font-bold text-sm text-gray-800 flex-1 leading-relaxed"><div class="text-[11px] text-blue-600 mb-1">${cd.teamAName}</div>${p.teamA[0].name}<br>${p.teamA[1].name}</div>
                 <div class="text-xs text-red-500 font-black italic px-2">VS</div>
-                <div class="text-center font-bold text-sm text-gray-800 flex-1 leading-relaxed">${p.teamB[0].name}<br>${p.teamB[1].name}</div>
+                <div class="text-center font-bold text-sm text-gray-800 flex-1 leading-relaxed"><div class="text-[11px] text-rose-600 mb-1">${cd.teamBName}</div>${p.teamB[0].name}<br>${p.teamB[1].name}</div>
              </div>
              <button onclick="openEndMatchModal('${cId}')" class="w-full bg-dark text-white hover:bg-black py-4 rounded-xl text-sm font-black shadow-lg active:scale-95">결과 입력 및 코트 비우기</button>
            </div>
          `;
        } else {
-         if(cd.assignedWaiting.length > 0) {
-            cBody += `<div class="mt-4 bg-white border border-blue-200 rounded-xl p-3 shadow-inner">
-               <div class="text-sm font-black text-blue-600 mb-2 text-center bg-blue-50 py-1.5 rounded-lg border border-blue-100">멤버 모집중 (${cd.assignedWaiting.length}/4)</div>
-               <div class="flex flex-wrap gap-2 justify-center">`;
-            cd.assignedWaiting.forEach(w => {
-               cBody += `<div class="bg-gray-100 text-gray-800 font-bold px-3 py-2 rounded-lg shadow-sm text-sm flex gap-2 items-center">${w.name}<button onclick="cancelAssignment('${cId}', '${w.id}')" class="text-gray-400 hover:text-red-500 ml-1 active:scale-90"><i class="fa-solid fa-xmark"></i></button></div>`;
-            });
-            cBody += `</div></div>`;
+         if(getCourtWaitingCount(cd) > 0) {
+            cBody += `
+              <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 shadow-inner">
+                  <div class="text-sm font-black text-blue-700 mb-2 text-center bg-white py-1.5 rounded-lg border border-blue-100">${cd.teamAName} (${cd.waitingA.length}/2)</div>
+                  <div class="flex flex-wrap gap-2 justify-center min-h-[44px]">
+                    ${cd.waitingA.length > 0
+                      ? cd.waitingA.map(w => `<div class="bg-white text-blue-900 font-bold px-3 py-2 rounded-lg shadow-sm text-sm flex gap-2 items-center">${w.name}<button onclick="cancelAssignment('${cId}', '${w.id}')" class="text-blue-300 hover:text-red-500 ml-1 active:scale-90"><i class="fa-solid fa-xmark"></i></button></div>`).join('')
+                      : `<div class="text-xs font-bold text-blue-400 self-center">아직 대기자가 없습니다</div>`}
+                  </div>
+                </div>
+                <div class="bg-rose-50 border border-rose-200 rounded-xl p-3 shadow-inner">
+                  <div class="text-sm font-black text-rose-700 mb-2 text-center bg-white py-1.5 rounded-lg border border-rose-100">${cd.teamBName} (${cd.waitingB.length}/2)</div>
+                  <div class="flex flex-wrap gap-2 justify-center min-h-[44px]">
+                    ${cd.waitingB.length > 0
+                      ? cd.waitingB.map(w => `<div class="bg-white text-rose-900 font-bold px-3 py-2 rounded-lg shadow-sm text-sm flex gap-2 items-center">${w.name}<button onclick="cancelAssignment('${cId}', '${w.id}')" class="text-rose-300 hover:text-red-500 ml-1 active:scale-90"><i class="fa-solid fa-xmark"></i></button></div>`).join('')
+                      : `<div class="text-xs font-bold text-rose-400 self-center">아직 대기자가 없습니다</div>`}
+                  </div>
+                </div>
+              </div>
+              <div class="mt-3 text-center text-xs font-bold text-gray-500">현재 ${getCourtWaitingCount(cd)}/4명 대기 중이며, 양 팀이 2명씩 모이면 즉시 경기 시작</div>
+            `;
          } else {
-            cBody += `<div class="text-center py-8 mt-3 bg-white border border-dashed border-gray-300 rounded-xl text-sm font-bold text-gray-400 shadow-sm leading-relaxed">빈 코트 대기중<br><span class="text-xs font-normal">아래 대기 명단에서 코트를 선택해 주세요</span></div>`;
+            cBody += `<div class="text-center py-8 mt-3 bg-white border border-dashed border-gray-300 rounded-xl text-sm font-bold text-gray-400 shadow-sm leading-relaxed">${cd.teamAName} vs ${cd.teamBName}<br><span class="text-xs font-normal">아래 대기 명단에서 원하는 팀 버튼으로 입장해 주세요</span></div>`;
          }
        }
 
@@ -750,7 +808,7 @@
   function openEndMatchModal(cId) {
      targetCourtId = cId; const m = courts[cId].playing;
      document.getElementById('modalMatchInfo').innerHTML = `
-       <div class="flex justify-between mb-2"><div class="text-blue-600 font-black">A팀</div><div class="text-red-600 font-black">B팀</div></div>
+       <div class="flex justify-between mb-2"><div class="text-blue-600 font-black">${courts[cId].teamAName}</div><div class="text-red-600 font-black">${courts[cId].teamBName}</div></div>
        <div class="flex justify-between"><div class="text-left">${m.teamA[0].name}<br>${m.teamA[1].name}</div><div class="text-gray-300">VS</div><div class="text-right">${m.teamB[0].name}<br>${m.teamB[1].name}</div></div>
      `;
      document.getElementById('matchResultModal').classList.remove('hidden');
@@ -897,7 +955,8 @@
         dailyQueue = [];
         CONFIG.courts.forEach(c => {
            courts[c].playing = null;
-           courts[c].assignedWaiting = [];
+           courts[c].waitingA = [];
+           courts[c].waitingB = [];
         });
         appState.isSystemOpen = false; // 자동 마감
         saveData();

@@ -16,6 +16,11 @@ content = content.replace(
       clubSubtitle: "소속 및 설명", // 타이틀 아래에 작게 표시될 설명 (예: 건국대 부동산대학원 테니스동아리)
       sport: "테니스", // 종목 이름 (예: 테니스, 배드민턴)
       courts: ["A", "B", "C"], // 사용할 코트(또는 테이블) 이름들을 배열로 입력하세요
+      courtTeams: {
+        A: ["A팀 알파", "A팀 브라보"],
+        B: ["B팀 알파", "B팀 브라보"],
+        C: ["C팀 알파", "C팀 브라보"]
+      }, // 코트별 팀명. 비워두면 기본값이 적용됩니다.
       adminPassword: "0000", // 관리자 화면 접속을 위한 기본 비밀번호
       primaryColor: "#10B981" // 앱의 메인 테마 색상 (HEX 코드)
     };
@@ -93,13 +98,45 @@ content = content.replace(
 
 // 8. Initial Courts initialization
 content = content.replace(
-  /let courts = \{\s*D: \{ status: 'active', playing: null, assignedWaiting: \[\] \}, \s*E: \{ status: 'active', playing: null, assignedWaiting: \[\] \},\s*F: \{ status: 'active', playing: null, assignedWaiting: \[\] \}\s*\};/,
+  /let courts = \{\s*D: \{ status: 'active', playing: null, waitingA: \[\], waitingB: \[\], teamAName: '.*?', teamBName: '.*?' \},\s*E: \{ status: 'active', playing: null, waitingA: \[\], waitingB: \[\], teamAName: '.*?', teamBName: '.*?' \},\s*F: \{ status: 'active', playing: null, waitingA: \[\], waitingB: \[\], teamAName: '.*?', teamBName: '.*?' \}\s*\};/,
   `let courts = {};
-  CONFIG.courts.forEach(c => { courts[c] = { status: 'active', playing: null, assignedWaiting: [] }; });`
+  function getCourtTeamNames(courtId) {
+    const configured = CONFIG.courtTeams?.[courtId];
+    if (Array.isArray(configured) && configured.length >= 2) return configured;
+    return [\`\${courtId}코트 A팀\`, \`\${courtId}코트 B팀\`];
+  }
+  CONFIG.courts.forEach(c => {
+    const [teamAName, teamBName] = getCourtTeamNames(c);
+    courts[c] = { status: 'active', playing: null, waitingA: [], waitingB: [], teamAName, teamBName };
+  });`
 );
 
 // 9. Data sync fallback blocks (replacing all connectedRef to renderUI())
 const newSyncBlock = `
+  const getCourtWaitingCount = (court) => (court.waitingA?.length || 0) + (court.waitingB?.length || 0);
+  function normalizeCourtState(court, fallback) {
+    const legacyWaiting = court?.assignedWaiting || [];
+    const waitingA = Array.isArray(court?.waitingA) ? [...court.waitingA] : [];
+    const waitingB = Array.isArray(court?.waitingB) ? [...court.waitingB] : [];
+
+    if (legacyWaiting.length > 0 && waitingA.length === 0 && waitingB.length === 0) {
+      legacyWaiting.forEach((player, index) => {
+        if (index % 2 === 0 && waitingA.length < 2) waitingA.push(player);
+        else if (waitingB.length < 2) waitingB.push(player);
+        else waitingA.push(player);
+      });
+    }
+
+    return {
+      status: court?.status || 'active',
+      playing: court?.playing || null,
+      waitingA,
+      waitingB,
+      teamAName: fallback.teamAName,
+      teamBName: fallback.teamBName
+    };
+  }
+
   if (db) {
     const connectedRef = ref(db, ".info/connected");
     onValue(connectedRef, (snap) => {
@@ -118,13 +155,11 @@ const newSyncBlock = `
          regularMembers = data.regularMembers || {};
          dailyQueue = data.dailyQueue || [];
          historyLog = data.historyLog || [];
+         lessonQueue = data.lessonQueue || [];
+         manualAttendance = data.manualAttendance || [];
          if(data.courts) {
             CONFIG.courts.forEach(c => {
-               if(data.courts[c]) courts[c] = { 
-                  status: data.courts[c].status || 'active', 
-                  playing: data.courts[c].playing || null, 
-                  assignedWaiting: data.courts[c].assignedWaiting || [] 
-               };
+               if(data.courts[c]) courts[c] = normalizeCourtState(data.courts[c], courts[c]);
             });
          }
          for(let k in regularMembers) { if(!regularMembers[k].name) regularMembers[k].name = k; }
@@ -154,19 +189,19 @@ const newSyncBlock = `
        if(p.courts) {
          CONFIG.courts.forEach(c => {
             if(p.courts[c]) {
-               courts[c].status = p.courts[c].status;
-               courts[c].playing = p.courts[c].playing;
-               courts[c].assignedWaiting = p.courts[c].assignedWaiting || [];
+               courts[c] = normalizeCourtState(p.courts[c], courts[c]);
             }
          });
        }
        if(p.historyLog) historyLog = p.historyLog;
+       if(p.lessonQueue) lessonQueue = p.lessonQueue;
+       if(p.manualAttendance) manualAttendance = p.manualAttendance;
     }
   }
 
   function saveData() { 
-    if (db) set(ref(db, 'tennis_data'), { appState, regularMembers, dailyQueue, courts, historyLog }); 
-    localStorage.setItem('club_tennis_data', JSON.stringify({ appState, regularMembers, dailyQueue, courts, historyLog }));
+    if (db) set(ref(db, 'tennis_data'), { appState, regularMembers, dailyQueue, courts, historyLog, lessonQueue, manualAttendance }); 
+    localStorage.setItem('club_tennis_data', JSON.stringify({ appState, regularMembers, dailyQueue, courts, historyLog, lessonQueue, manualAttendance }));
   }`;
 
 content = content.replace(
