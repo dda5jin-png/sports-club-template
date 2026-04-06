@@ -64,6 +64,11 @@
     .marquee { overflow: hidden; white-space: nowrap; box-sizing: border-box; }
     .marquee span { display: inline-block; padding-left: 100%; animation: marquee 20s linear infinite; }
     select, input[type="text"], input[type="password"] { appearance: none; -webkit-appearance: none; }
+    .queue-action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+    .queue-action-grid .queue-action-full { grid-column: 1 / -1; }
+    @media (min-width: 640px) {
+      .queue-action-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
   </style>
 </head>
 <body class="bg-gray-100 text-gray-800 h-[100dvh] w-screen overflow-hidden flex justify-center">
@@ -565,20 +570,20 @@
             const court = courts[cId];
             if(cSlots[cId] > 0) {
               if(court.waitingA.length < 2) {
-                sc += `<button onclick="assignToCourt('${q.id}', '${cId}', 'A')" class="flex-1 min-w-[140px] bg-white border border-blue-200 text-blue-700 py-3 rounded-xl font-black text-sm shadow-sm active:scale-95 px-2">🎾 ${cId}코트 ${court.teamAName}<span class="block text-[11px] font-bold text-blue-500 mt-1">${court.waitingA.length}/2 대기</span></button>`;
+                sc += `<button onclick="assignToCourt('${q.id}', '${cId}', 'A')" class="w-full min-w-0 bg-white border border-blue-200 text-blue-700 py-3 rounded-xl font-black text-[13px] leading-tight shadow-sm active:scale-95 px-2 break-keep">🎾 ${cId}코트 ${court.teamAName}<span class="block text-[11px] font-bold text-blue-500 mt-1">${court.waitingA.length}/2 대기</span></button>`;
               }
               if(court.waitingB.length < 2) {
-                sc += `<button onclick="assignToCourt('${q.id}', '${cId}', 'B')" class="flex-1 min-w-[140px] bg-white border border-rose-200 text-rose-700 py-3 rounded-xl font-black text-sm shadow-sm active:scale-95 px-2">🎾 ${cId}코트 ${court.teamBName}<span class="block text-[11px] font-bold text-rose-500 mt-1">${court.waitingB.length}/2 대기</span></button>`;
+                sc += `<button onclick="assignToCourt('${q.id}', '${cId}', 'B')" class="w-full min-w-0 bg-white border border-rose-200 text-rose-700 py-3 rounded-xl font-black text-[13px] leading-tight shadow-sm active:scale-95 px-2 break-keep">🎾 ${cId}코트 ${court.teamBName}<span class="block text-[11px] font-bold text-rose-500 mt-1">${court.waitingB.length}/2 대기</span></button>`;
               }
             }
          });
          btnHtml = `
          <div class="mt-4 pt-4 border-t border-blue-200">
            <p class="text-xs font-black text-blue-800 mb-3 text-center w-full bg-blue-100 py-1.5 rounded-lg animate-pulse">☝️회원님의 선택 차례입니다. 코트나 패스를 눌러주세요.</p>
-           <div class="flex flex-wrap sm:flex-nowrap gap-2">
+           <div class="queue-action-grid">
              ${sc}
-             ${appState.isFCourtDisabled ? `<button onclick="moveToLesson('${q.id}')" class="flex-1 bg-orange-50 border border-orange-200 text-orange-700 py-3 rounded-xl font-black text-sm shadow-sm active:scale-95 whitespace-nowrap px-1">🎓 레슨</button>` : ''}
-             <button onclick="passTurn('${q.id}')" class="flex-1 sm:flex-none bg-gray-300 text-gray-700 py-3 px-3 rounded-xl font-bold text-sm shadow-sm active:scale-95 text-center px-1 whitespace-nowrap">패스 (양보)</button>
+             ${appState.isFCourtDisabled ? `<button onclick="moveToLesson('${q.id}')" class="w-full min-w-0 bg-orange-50 border border-orange-200 text-orange-700 py-3 rounded-xl font-black text-[13px] leading-tight shadow-sm active:scale-95 px-2 break-keep">🎓 레슨</button>` : ''}
+             <button onclick="passTurn('${q.id}')" class="queue-action-full w-full bg-gray-300 text-gray-700 py-3 px-3 rounded-xl font-bold text-sm shadow-sm active:scale-95 text-center break-keep">패스 (양보)</button>
            </div>
          </div>`;
       }
